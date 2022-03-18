@@ -4,7 +4,7 @@ import joblib
 import pandas as pd, numpy as np
 # from lime.lime_tabular import LimeTabularExplainer
 # import matplotlib.pyplot as plt
-
+# import mpld3
 
 app = Flask(__name__)
 
@@ -16,12 +16,12 @@ def run():
 @app.route('/predict', methods=['GET', 'POST'])
 def predict():
     try:
-        model = joblib.load("lgbm_model.joblib")
-        sample = pd.read_csv('sample.csv', index_col=0)
+        model = joblib.load("model/model.jbl")
+        sample = pd.read_csv('data/sample.csv', index_col=0)
     except:
         result = "Files couldn't be loaded."
         return make_response(result, 400)
-
+    
     try:
         id_customer = int(request.args.get('id_customer'))
         customer = np.array(sample.loc[id_customer]).reshape(1, -1)
@@ -42,30 +42,33 @@ def predict():
 # @app.route('/lime', methods=['GET', 'POST'])
 # def lime_explainer():
 #     try:
-#         model = joblib.load("lgbm_model.joblib")
-#         X_test = pd.read_csv('X_test.csv', index_col=0)
+#         model = joblib.load("model/model.jbl")
+#         sample = pd.read_csv('data/sample.csv', index_col=0)
 #     except:
 #         result = "Files couldn't be loaded."
 #         return make_response(result, 400)
 
 #     try:
 #         id_customer = int(request.args.get('id_customer'))
-#         customer = np.array(X_test.loc[id_customer]).reshape(1, -1)
+#         customer = sample.loc[id_customer]
 #     except:
 #         result = 'Please enter a valid customer id.'
 #         return make_response(result, 400)
     
-#     lime = LimeTabularExplainer(X_test,
-#                                 feature_names=X_test.columns,
+#     lime = LimeTabularExplainer(sample,
+#                                 feature_names=sample.columns,
 #                                 class_names=["Solvent", "Not Solvent"],
 #                                 discretize_continuous=False)
 #     exp = lime.explain_instance(customer,
 #                                 model.predict_proba,
 #                                 num_samples=100)
 
-#     exp.show_in_notebook(show_table=True)
-#     exp.as_pyplot_figure()
+#     # exp.show_in_notebook(show_table=True)
+#     fig = exp.as_pyplot_figure()
 #     plt.tight_layout()
+
+#     return jsonify(fig.as_html())
+#     # return jsonify(mpld3.fig_to_html(fig))
 
 
 if __name__ == "__main__":

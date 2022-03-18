@@ -4,8 +4,13 @@ import streamlit.components.v1 as components
 import requests
 import joblib
 from lime.lime_tabular import LimeTabularExplainer
-# import matplotlib.pyplot as plt
-import base64
+import matplotlib.pyplot as plt
+import shap
+import seaborn as sns
+from PIL import Image
+
+
+st.set_option('deprecation.showPyplotGlobalUse', False)
 
 
 def request_prediction(id_customer):
@@ -21,84 +26,96 @@ def request_prediction(id_customer):
     return response.json()
 
 
-# def request_explanation(id_customer):
-#     API_URL = 'http://127.0.0.1:5000/lime'
-
-#     data_json = {'id_customer': id_customer}
-#     response = requests.get(API_URL, params=data_json)
-
-#     if response.status_code != 200:
-#         raise Exception(
-#             "Request failed with status {}, {}".format(response.status_code, response.text))
-
-#     return response.json()
-
 def lime_explainer(id_customer):
-    try:
-        model = joblib.load("lgbm_model.joblib")
-        X_test = pd.read_csv('X_test.csv', index_col=0)
-    except:
-        st.error("Files couldn't be loaded.")
-    try:
-        customer = X_test.loc[id_customer]
-    except:
-        st.error('Please enter a valid customer id.')
-    
-    lime = LimeTabularExplainer(X_test,
-                                feature_names=X_test.columns,
+    customer = st.session_state.sample.loc[id_customer]
+
+    lime = LimeTabularExplainer(st.session_state.sample,
+                                feature_names=st.session_state.sample.columns,
                                 class_names=["Solvent", "Not Solvent"],
                                 discretize_continuous=False)
     exp = lime.explain_instance(customer,
-                                model.predict_proba,
+                                st.session_state.model.predict_proba,
                                 num_samples=100)
-
-    # exp.show_in_notebook(show_table=True)
+    exp.show_in_notebook(show_table=True)
     fig = exp.as_pyplot_figure()
-    # # plt.tight_layout()
     st.pyplot(fig)
-    
     return exp.as_html()
 
+
+def shap_explainer(id_customer):
+    customer = st.session_state.sample.loc[id_customer]
+    i = st.session_state.sample.index.get_loc(id_customer)
+    explainer = shap.TreeExplainer(st.session_state.model)
+    shap_values = explainer.shap_values(st.session_state.sample)
+    st.pyplot(shap.force_plot(matplotlib=True,
+                              base_value=explainer.expected_value[1],
+                              shap_values=shap_values[1][i],
+                              features=st.session_state.sample.loc[id_customer],
+                              feature_names=st.session_state.sample.columns
+                             ))
     
+ 
+def display_importances(nb_feats):
+    feature_importance_values = st.session_state.model.feature_importances_
+
+    feats = pd.DataFrame({'feature': list(st.session_state.sample.columns),
+                          'importance': feature_importance_values})
+    cols = feats.groupby("feature").mean().sort_values(by="importance", ascending=False)[:nb_feats].index
+    best_feats = feats.loc[feats.feature.isin(cols)]
+    fig = plt.figure(figsize=(8, 10))
+    if nb_feats > 20:
+        fig = plt.figure(figsize=(8, 15))
+    sns.barplot(x="importance", y="feature", data=best_feats.sort_values(by="importance", ascending=False))
+    plt.tight_layout()
+    st.sidebar.pyplot(fig)
+ 
 
 def main():
-    sample = pd.read_csv('sample.csv', index_col=0)
+
+    try:
+        model = joblib.load("model/model.jbl")
+        sample = pd.read_csv('data/sample.csv', index_col=0)
+    except:
+        st.error("Files couldn't be loaded.")
+    
+    st.session_state.sample = sample
+    st.session_state.model = model
+
     customers = sample.index.tolist() + [0]
+    customers = list(map(str, sorted(customers)))
 
     st.title('Credit scoring prediction:')
+    st.sidebar.title('Global importance of features')
 
-    c1, c2 = st.columns([1, 1])
-    id_customer = c1.selectbox('Please select a customer id:',
-                               sorted(customers, key=int))
+    nb_feats = st.sidebar.number_input('Number of features :',
+                            min_value=5, max_value = 40, value=10, step=1)
+    
+    display_importances(nb_feats)
+    # col1, col2 = st.columns(2)
 
-    input_customer = c2.number_input('Please enter a customer id:',
-                                     min_value=0, value=0, step=1)
-
+    # with col1:
+    #     with st.form(key='form'):
+    id_customer = st.selectbox('Please select a customer id:',
+                                customers)
+    id_customer = int(id_customer)
+    # predict_btn = st.form_submit_button('Score')
     predict_btn = st.button('Score')
-
-    if input_customer:
-        id_customer = input_customer
-
-    lime_btn = None
 
     if predict_btn:
         pred = request_prediction(id_customer)
-        # st.write(pred)
         if pred['pred'] == 0:
-            message = 'The customer is reliable ' + \
-                      'wih a probability of ' + pred['proba_0']
-            st.success(message)
+            st.success('The customer is solvent ' + \
+                    'wih a probability of ' + pred['proba_0'])
         else:
-            message = 'The customer is not reliable ' + \
-                      'wih a probability of ' + pred['proba_1']
-            st.error(message)
+            st.error('The customer is not solvent ' + \
+                    'wih a probability of ' + pred['proba_1'])
     
-    lime_btn = st.button('Individual explanations')
-
-    if lime_btn:
         explainer = lime_explainer(id_customer)
+        shap_explainer(id_customer)
+                # json2html.convert(components.html(explainer, height=800))
         components.html(explainer, height=800)
-        # components.html("<html><body><h1>NO</h1></body></html>", width=200, height=200)
+                # components.html("<html><body><h1>NO</h1></body></html>", width=200, height=200)
+    
 
 
 if __name__ == '__main__':
