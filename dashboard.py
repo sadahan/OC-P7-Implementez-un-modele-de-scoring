@@ -142,7 +142,9 @@ def main():
                     min_value=0.0, value=customer['AMT_GOODS_PRICE'],
                     key='goods_price')
     nb_neighbors = c1.number_input('Number of similar clients to show :',
-                                    min_value=0, value=5)
+                                    min_value=1, value=5)
+    n_neighbor = c2.number_input('Explaining similar clients number :',
+                                    min_value=1, value=1, max_value=nb_neighbors)
 
     customer['AMT_INCOME_TOTAL'] = st.session_state.income
     customer['AMT_CREDIT'] = st.session_state.credit
@@ -168,16 +170,20 @@ def main():
     
         explainer = lime_explainer(data_customer)
         shap_explainer(data_customer)
-        components.html(explainer, height=800)
+        components.html(explainer, height=600)
 
         neighbors = get_closest_neighbors(sample, id_customer, nb_neighbors)
         cols = ['AMT_INCOME_TOTAL', 'AMT_CREDIT', 'AMT_ANNUITY', 'AMT_GOODS_PRICE',
                 'solvent']
         df_neighbors = unscaled_sample[cols].rename(columns={'AMT_INCOME_TOTAL': 'income',
          'AMT_CREDIT': 'credit', 'AMT_ANNUITY': 'annuity', 'AMT_GOODS_PRICE': 'goods_price'})
-        st.write('Features of ' + str(nb_neighbors) + ' similar customers:')
+        st.write('Features of the ' + str(nb_neighbors) + ' most similar customers:')
         st.write(df_neighbors.loc[neighbors])
-    
+        neighbor = sample.loc[neighbors[n_neighbor-1]]
+        st.write('Explanation for the prediction of the ' + str(n_neighbor) + 'th most similar customer:')
+        explain_neighbor = lime_explainer(neighbor.to_json())
+        shap_explainer(neighbor.to_json())
+        components.html(explain_neighbor, height=600)
 
 if __name__ == '__main__':
     main()
